@@ -77,7 +77,7 @@ export default function FileUpload({ files = [], onAdd, onRemove, targetLabel, h
           <input ref={inputRef} type="file" multiple hidden onChange={(e) => { if (e.target.files.length) { handleFiles(e.target.files); e.target.value = ""; } }} />
         </div>
       </motion.div>
-        {files.length > 0 && <Badge placement="top-right" size="lg" tone="default">{files.length}</Badge>}
+        <Badge placement="top-right" size="lg" tone="default">{files.length}</Badge>
       </Badge.Anchor>
 
       {/* Lectures en cours */}
