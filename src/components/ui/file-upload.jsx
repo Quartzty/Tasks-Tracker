@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { UploadCloud, File as FileIcon, Trash2, CheckCircle, Download } from "lucide-react";
 import { cn } from "../../lib/cn.js";
 import { uid, fmtSize } from "../../lib/core.js";
-import { Badge } from "./badge.jsx";
+import PixelCanvas from "./pixel-canvas.jsx";
 
 function readWithProgress(file, onProgress) {
   return new Promise((res) => {
@@ -44,8 +44,7 @@ export default function FileUpload({ files = [], onAdd, onRemove, targetLabel, h
 
   return (
     <div className="w-full">
-      {/* Zone de dépôt + badge compteur (composant 21st.dev, uniquement ici) */}
-      <Badge.Anchor className="flex w-full">
+      {/* Zone de dépôt + pixel shimmer (composant 21st.dev, uniquement ici) */}
       <motion.div
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
@@ -55,11 +54,12 @@ export default function FileUpload({ files = [], onAdd, onRemove, targetLabel, h
         animate={{ scale: isDragging ? 1.015 : 1 }}
         transition={{ duration: 0.2 }}
         className={cn(
-          "group relative w-full cursor-pointer rounded-2xl border border-dashed border-border bg-secondary/40 p-8 text-center transition-colors hover:bg-secondary/70",
+          "group relative w-full cursor-pointer overflow-hidden rounded-2xl border border-dashed border-border bg-secondary/40 p-8 text-center transition-colors hover:bg-secondary/70",
           isDragging && "border-foreground bg-secondary ring-2 ring-ring/40"
         )}
       >
-        <div className="flex flex-col items-center gap-4">
+        <PixelCanvas gap={6} />
+        <div className="relative z-10 flex flex-col items-center gap-4">
           <motion.div animate={{ y: isDragging ? [-4, 0, -4] : 0 }} transition={{ duration: 1.4, repeat: isDragging ? Infinity : 0, ease: "easeInOut" }}>
             <UploadCloud className={cn("h-12 w-12 transition-colors", isDragging ? "text-foreground" : "text-muted-foreground group-hover:text-foreground")} />
           </motion.div>
@@ -77,8 +77,6 @@ export default function FileUpload({ files = [], onAdd, onRemove, targetLabel, h
           <input ref={inputRef} type="file" multiple hidden onChange={(e) => { if (e.target.files.length) { handleFiles(e.target.files); e.target.value = ""; } }} />
         </div>
       </motion.div>
-        <Badge placement="top-right" size="lg" tone="default">{files.length}</Badge>
-      </Badge.Anchor>
 
       {/* Lectures en cours */}
       <AnimatePresence>
