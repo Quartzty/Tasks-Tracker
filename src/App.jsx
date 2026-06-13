@@ -5,7 +5,7 @@ import {
   Sun, Moon, Plus, FolderPlus, Lightbulb, CalendarPlus, ChevronLeft, Folder, CircleCheck, User,
 } from "lucide-react";
 import { kvGet, kvSet, mirrorBackup, readMirror, cloudEnabled } from "./lib/storage.js";
-import { DATA_KEY, SEED, migrate, todayISO, fmtTime, getProfile, saveProfile, hasSpaceParam, normalizeMembers, upsertMember, SHARED_KEY, SHARED_DEFAULT } from "./lib/core.js";
+import { DATA_KEY, SEED, migrate, todayISO, fmtTime, getProfile, saveProfile, hasSpaceParam, normalizeMembers, upsertMember, SHARED_KEY, SHARED_DEFAULT, tasksToShare, reconcileMirror } from "./lib/core.js";
 import { CSS } from "./lib/theme.js";
 import { cn } from "./lib/cn.js";
 import ProfileGate from "./modules/ProfileGate.jsx";
@@ -51,7 +51,9 @@ export default function App() {
   const [cmdk, setCmdk] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [profile, setProfile] = useState(getProfile());
+  const [sharedMembers, setSharedMembers] = useState([]);
   const notifiedRef = useRef(new Set());
+  const lastMirrorSig = useRef("");
 
   const pushToast = (text, kind = "info") => { const id = Math.random().toString(36).slice(2); setToasts((t) => [...t, { id, text, kind }]); setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4200); };
   const setData = (d) => setDataRaw(d);
@@ -95,15 +97,32 @@ export default function App() {
     setProfile(saveProfile({ name: data.settings.userName || "Moi", color: data.settings.accent && data.settings.accent.startsWith("#") ? "#FAFAFA" : "#FAFAFA", role: "" }));
   }, [loaded, data, profile]);
 
-  /* Enregistre / met à jour le membre courant dans l'espace partagé. */
+  /* Enregistre / met à jour le membre courant dans l'espace partagé + charge la liste des membres. */
   useEffect(() => {
     if (!profile) return;
     (async () => {
       const cur = normalizeMembers((await kvGet(SHARED_KEY)) || structuredClone(SHARED_DEFAULT));
       upsertMember(cur, profile);
       await kvSet(SHARED_KEY, cur);
+      setSharedMembers(cur.members || []);
     })();
   }, [profile]);
+
+  /* Miroir des tâches perso "watchpoint" / épinglées vers l'espace partagé (lecture seule). */
+  useEffect(() => {
+    if (!loaded || !data || !profile) return;
+    const sig = JSON.stringify(tasksToShare(data).map((t) => [t.id, t.title, t.done, t.priority, t.date, t.teamAssignee || "", (t.tags || []).map((x) => String(x).toLowerCase())]));
+    if (sig === lastMirrorSig.current) return;
+    const h = setTimeout(async () => {
+      lastMirrorSig.current = sig;
+      const cur = normalizeMembers((await kvGet(SHARED_KEY)) || structuredClone(SHARED_DEFAULT));
+      upsertMember(cur, profile);
+      reconcileMirror(cur, data, profile);
+      await kvSet(SHARED_KEY, cur);
+      setSharedMembers(cur.members || []);
+    }, 1300);
+    return () => clearTimeout(h);
+  }, [data, loaded, profile]);
 
   useEffect(() => {
     if (!loaded || !data) return;
@@ -239,10 +258,10 @@ export default function App() {
             {view === "dashboard" && <Dashboard data={data} update={update} itemsByDate={itemsByDate} goTo={goTo} setSelectedDate={setSelectedDate} />}
             {view === "data" && <DataView data={data} pushToast={pushToast} />}
             {view === "brain" && <Brain data={data} update={update} pushToast={pushToast} goTo={goTo} />}
-            {view === "tasks" && <Tasks data={data} update={update} pushToast={pushToast} />}
+            {view === "tasks" && <Tasks data={data} update={update} pushToast={pushToast} members={sharedMembers} profile={profile} />}
             {view === "agenda" && <Agenda data={data} update={update} itemsByDate={itemsByDate} pushToast={pushToast} selectedDate={selectedDate} setSelectedDate={setSelectedDate} />}
             {view === "projects" && <Projects data={data} update={update} pushToast={pushToast} />}
-            {view === "shared" && <Shared profile={profile} pushToast={pushToast} />}
+            {view === "shared" && <Shared profile={profile} pushToast={pushToast} data={data} />}
             {view === "crm" && <Crm data={data} update={update} pushToast={pushToast} />}
             {view === "settings" && <Settings data={data} update={update} pushToast={pushToast} setData={setData} profile={profile} setProfile={setProfile} />}
           </div>

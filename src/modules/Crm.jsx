@@ -1,12 +1,14 @@
 import React, { useState, useRef } from "react";
-import { Plus, Mail, Phone, Trash2, Check, X } from "lucide-react";
+import { Plus, Mail, Phone, Trash2, Check, X, Paperclip } from "lucide-react";
 import { uid, STAGES, pushAct } from "../lib/core.js";
-import { Modal } from "../components.jsx";
+import { Modal, DropZone, FileChip } from "../components.jsx";
 
 function ContactForm({ c, onSave, onDelete }) {
   const [f, setF] = useState(c);
   const [tag, setTag] = useState("");
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const addDocs = (fs) => set("files", [...(f.files || []), ...fs]);
+  const rmDoc = (id) => set("files", (f.files || []).filter((x) => x.id !== id));
   return (
     <div>
       <div className="row2">
@@ -28,6 +30,10 @@ function ContactForm({ c, onSave, onDelete }) {
         <input placeholder="Ajouter un tag, Entrée…" value={tag} onChange={(e) => setTag(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const t = tag.trim(); if (t && !(f.tags || []).includes(t)) set("tags", [...(f.tags || []), t]); setTag(""); } }} />
       </div>
       <div className="field"><label>Notes</label><textarea rows={3} value={f.notes || ""} onChange={(e) => set("notes", e.target.value)} /></div>
+      <div className="field"><label>Documents du client {(f.files || []).length > 0 && <span className="mono" style={{ color: "var(--t3)" }}>{f.files.length}</span>}</label>
+        {(f.files || []).map((doc) => <FileChip key={doc.id} f={doc} onRemove={() => rmDoc(doc.id)} />)}
+        <DropZone compact onFiles={addDocs} label="Glisse-dépose les documents (contrat, deck, factures…)" />
+      </div>
       <div style={{ display: "flex", gap: 9 }}>
         {onDelete && <button className="btn btn-red" onClick={onDelete}><Trash2 size={14} /> Supprimer</button>}
         <button className="btn btn-green" style={{ flex: 1, justifyContent: "center" }} disabled={!f.name.trim()} onClick={() => onSave(f)}><Check size={14} /> Enregistrer</button>
@@ -61,7 +67,7 @@ export default function Crm({ data, update, pushToast }) {
     <div>
       <div className="section-head">
         <div><h2>CRM</h2><div className="hint" style={{ marginTop: 4 }}>{data.contacts.length} contact{data.contacts.length > 1 ? "s" : ""} · pipeline total : <b style={{ color: "var(--acT)" }}>{total.toLocaleString("fr-FR")} €</b></div></div>
-        <button className="btn" onClick={() => setModal({ name: "", company: "", email: "", phone: "", stage: "Lead", value: "", notes: "", tags: [] })}><Plus size={14} /> Nouveau contact</button>
+        <button className="btn" onClick={() => setModal({ name: "", company: "", email: "", phone: "", stage: "Lead", value: "", notes: "", tags: [], files: [] })}><Plus size={14} /> Nouveau contact</button>
       </div>
       <div className="crm-board">
         {STAGES.map((st) => {
@@ -76,7 +82,7 @@ export default function Crm({ data, update, pushToast }) {
                   <div className="nm">{c.name}</div>
                   {c.company && <div className="co">{c.company}</div>}
                   {(c.tags || []).length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>{c.tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>}
-                  <div style={{ display: "flex", gap: 9, marginTop: 7, color: "var(--t3)" }}>{c.email && <Mail size={12} />}{c.phone && <Phone size={12} />}</div>
+                  <div style={{ display: "flex", gap: 9, marginTop: 7, color: "var(--t3)", alignItems: "center" }}>{c.email && <Mail size={12} />}{c.phone && <Phone size={12} />}{(c.files || []).length > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11.5 }}><Paperclip size={12} />{c.files.length}</span>}</div>
                   {Number(c.value) > 0 && <div className="val">{Number(c.value).toLocaleString("fr-FR")} €</div>}
                 </div>
               ))}

@@ -1,12 +1,14 @@
 import React, { useState, useRef } from "react";
 import {
-  Plus, Search, Clock, Paperclip, GripVertical, Trash2, CheckSquare, X, Check, Link2, ExternalLink,
+  Plus, Search, Clock, Paperclip, GripVertical, Trash2, CheckSquare, X, Check, Link2, ExternalLink, Users, Share2,
 } from "lucide-react";
-import { uid, todayISO, PRIOS, STATUS, fmtNice, daysBetween } from "../lib/core.js";
+import { uid, todayISO, PRIOS, STATUS, fmtNice, isWatchpointTagged } from "../lib/core.js";
 import { pushAct } from "../lib/core.js";
 import { Sheet, DropZone, FileChip, PrioPill, StatusPill, Empty } from "../components.jsx";
 
-function TaskEditor({ task, projects, patch, addFiles, rmFile, activity }) {
+function TaskEditor({ task, projects, patch, addFiles, rmFile, activity, members = [], profile }) {
+  const wpAuto = isWatchpointTagged(task);
+  const shared = wpAuto || task.teamShare;
   const [tag, setTag] = useState("");
   const [sub, setSub] = useState("");
   const [linkL, setLinkL] = useState(""); const [linkU, setLinkU] = useState("");
@@ -88,6 +90,33 @@ function TaskEditor({ task, projects, patch, addFiles, rmFile, activity }) {
         {(task.files || []).map((f) => <FileChip key={f.id} f={f} onRemove={() => rmFile(f.id)} />)}
         <DropZone compact onFiles={addFiles} label="Déposer un fichier sur la tâche" />
       </div>
+
+      <div className="field"><label>Espace partagé</label>
+        {wpAuto ? (
+          <div className="hint" style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--acT)" }}>
+            <Share2 size={14} /> Partagée automatiquement (tag « watchpoint ») — suivie dans l'équipe en lecture seule.
+          </div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 4 }}>
+            <button className={"check" + (task.teamShare ? " on" : "")} onClick={() => set("teamShare", !task.teamShare)}><Check size={12} strokeWidth={3} /></button>
+            <span style={{ fontSize: 13.5 }}>Inclure dans l'espace partagé</span>
+          </div>
+        )}
+        {shared && (
+          <div style={{ marginTop: 10 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--t2)", marginBottom: 7, textTransform: "uppercase", letterSpacing: ".04em" }}>Personne concernée (épingle)</label>
+            {members.length === 0 ? (
+              <div className="hint">Invite des membres dans l'Espace partagé pour pouvoir épingler quelqu'un. Par défaut, attribuée à toi.</div>
+            ) : (
+              <select value={task.teamAssignee || ""} onChange={(e) => set("teamAssignee", e.target.value || null)}>
+                <option value="">{profile ? profile.name + " (moi)" : "Moi"}</option>
+                {members.filter((m) => !profile || m.id !== profile.id).map((m) => <option key={m.id} value={m.id}>{m.name}{m.role ? " · " + m.role : ""}</option>)}
+              </select>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="field" style={{ marginBottom: 0 }}><label>Historique</label>
         <div className="hint mono" style={{ fontSize: 11 }}>
           créée {fmtNice(new Date(task.createdAt).toISOString().slice(0, 10))}
@@ -99,7 +128,7 @@ function TaskEditor({ task, projects, patch, addFiles, rmFile, activity }) {
   );
 }
 
-export default function Tasks({ data, update, pushToast }) {
+export default function Tasks({ data, update, pushToast, members = [], profile }) {
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(todayISO());
   const [time, setTime] = useState("");
@@ -209,6 +238,7 @@ export default function Tasks({ data, update, pushToast }) {
           <span className="task-title">{t.title}</span>
           {(t.subtasks || []).length > 0 && <span className="task-meta"><CheckSquare size={12} />{t.subtasks.filter((s) => s.done).length}/{t.subtasks.length}</span>}
           {t.projectId && projName(t.projectId) && <span className="tag">{projName(t.projectId)}</span>}
+          {(t.teamShare || isWatchpointTagged(t)) && <span className="task-meta" title="Partagée à l'équipe" style={{ color: "var(--acT)" }}><Share2 size={12} /></span>}
           {(t.files || []).length > 0 && <span className="task-meta"><Paperclip size={12} />{t.files.length}</span>}
           {t.date && <span className="task-meta" style={!t.done && t.date < today ? { color: "var(--rd)" } : null}><Clock size={12} />{fmtNice(t.date)}{t.time ? " " + t.time : ""}</span>}
           <span onClick={(e) => { e.stopPropagation(); cyclePrio(t.id); }}><PrioPill p={t.priority} /></span>
@@ -225,7 +255,7 @@ export default function Tasks({ data, update, pushToast }) {
             <button className={"check" + (openTask.done ? " on" : "")} onClick={() => toggle(openTask.id)}><Check size={12} strokeWidth={3} /></button>
             <StatusPill s={openTask.status || (openTask.done ? "done" : "todo")} />
           </div>
-          <TaskEditor task={openTask} projects={data.projects} activity={taskActivity}
+          <TaskEditor task={openTask} projects={data.projects} activity={taskActivity} members={members} profile={profile}
             patch={(p) => patch(openTask.id, p)} addFiles={(fs) => addFiles(openTask.id, fs)} rmFile={(fid) => rmFile(openTask.id, fid)} />
         </Sheet>
       )}

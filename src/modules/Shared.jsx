@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import {
   uid, fmtTime, todayISO, PRIOS, SHARED_KEY, SHARED_DEFAULT, getSpaceCode, inviteUrl,
-  normalizeMembers, upsertMember, computeMemberStats, computeSharedTotals,
+  normalizeMembers, upsertMember, computeMemberStats, computeSharedTotals, reconcileMirror,
 } from "../lib/core.js";
 import { kvGet, kvSet } from "../lib/storage.js";
 import { Modal, DropZone, FileChip, Empty, linkify } from "../components.jsx";
@@ -17,7 +17,7 @@ import { cn } from "../lib/cn.js";
 
 const RANK = (i) => String(i + 1).padStart(2, "0");
 
-export default function Shared({ profile, pushToast }) {
+export default function Shared({ profile, pushToast, data }) {
   const [shared, setShared] = useState(null);
   const [tab, setTab] = useState("productivite");
   const [msg, setMsg] = useState("");
@@ -33,6 +33,7 @@ export default function Shared({ profile, pushToast }) {
   const load = async (announce) => {
     const cur = normalizeMembers((await kvGet(SHARED_KEY)) || { ...SHARED_DEFAULT });
     if (profile) upsertMember(cur, profile);
+    if (data && profile) reconcileMirror(cur, data, profile);
     await kvSet(SHARED_KEY, cur);
     setShared(cur);
     if (announce) pushToast("Espace partagé synchronisé");
@@ -45,6 +46,7 @@ export default function Shared({ profile, pushToast }) {
     const cur = normalizeMembers((await kvGet(SHARED_KEY)) || { ...SHARED_DEFAULT });
     if (profile) upsertMember(cur, profile);
     fn(cur);
+    if (data && profile) reconcileMirror(cur, data, profile);
     await kvSet(SHARED_KEY, cur);
     setShared({ ...cur }); setBusy(false);
   };
@@ -140,6 +142,18 @@ export default function Shared({ profile, pushToast }) {
           {dayTasks.map((t) => {
             const asg = t.assignee ? memberById(t.assignee) : null;
             const by = t.doneBy ? memberById(t.doneBy) : null;
+            if (t.mirror) {
+              return (
+                <div key={t.id} className={"task-row" + (t.done ? " done" : "")} style={{ cursor: "default" }} title="Tâche perso partagée — gérée depuis l'espace perso (lecture seule)">
+                  <span className={"check" + (t.done ? " on" : "")} style={{ pointerEvents: "none" }}>{t.done && <Check size={12} strokeWidth={3} />}</span>
+                  <span className="task-title">{t.title}</span>
+                  <span className="tag" style={t.category === "watchpoint" ? null : { background: "var(--surface3)", color: "var(--t2)" }}>{t.category === "watchpoint" ? "watchpoint" : "perso"}</span>
+                  <span className="task-meta">par {t.author || (asg && asg.name) || "—"}</span>
+                  {asg && <MemberAvatar member={asg} size={26} />}
+                  <span className="prio-dot" style={{ background: (PRIOS[t.priority] || PRIOS[3]).color }} />
+                </div>
+              );
+            }
             return (
               <div key={t.id} className={"task-row" + (t.done ? " done" : "")} style={{ cursor: "default" }}>
                 <button className={"check" + (t.done ? " on" : "")} onClick={() => toggleST(t.id)}><Check size={12} strokeWidth={3} /></button>

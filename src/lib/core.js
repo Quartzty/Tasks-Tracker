@@ -238,6 +238,36 @@ export function computeSharedTotals(shared) {
   return { total: tasks.length, done, open: tasks.length - done, rate: tasks.length ? Math.round((done / tasks.length) * 100) : 0, members: ((shared && shared.members) || []).length };
 }
 
+/* ----- Miroir des tâches perso → espace partagé (lecture seule, par membre) ----- */
+/* Une tâche perso part dans le partagé si elle a le tag "watchpoint" OU teamShare=true. */
+export function isWatchpointTagged(t) {
+  return (t.tags || []).map((x) => String(x).toLowerCase()).includes("watchpoint");
+}
+export function tasksToShare(personalData) {
+  return (personalData.tasks || []).filter((t) => t.teamShare === true || isWatchpointTagged(t));
+}
+/* Reconcilie les tâches mirrorées du membre courant : ne touche QUE celles dont
+   origin.ownerId === profile.id (les autres membres gèrent les leurs). */
+export function reconcileMirror(sharedDoc, personalData, profile) {
+  if (!sharedDoc.tasks) sharedDoc.tasks = [];
+  const owner = profile.id;
+  const ownerName = profile.name;
+  const mirrored = tasksToShare(personalData).map((t) => {
+    const assignee = t.teamAssignee || owner;
+    return {
+      id: "mir:" + owner + ":" + t.id,
+      title: t.title, priority: t.priority || 3,
+      done: !!t.done, doneAt: t.doneAt || null, doneBy: t.done ? assignee : null,
+      assignee, date: t.date || null, author: ownerName,
+      mirror: true, category: isWatchpointTagged(t) ? "watchpoint" : null,
+      origin: { ownerId: owner, taskId: t.id },
+    };
+  });
+  const others = sharedDoc.tasks.filter((t) => !(t.origin && t.origin.ownerId === owner));
+  sharedDoc.tasks = [...others, ...mirrored];
+  return sharedDoc;
+}
+
 /* ------------------------------- Activité ------------------------------- */
 /* Journal append-only : la mémoire traçable du Personal Brain.
    Appelé À L'INTÉRIEUR d'un update(), mute directement l'objet data. */
@@ -261,7 +291,7 @@ export const ACT_ICON = {
 export const SEED = {
   v: 2,
   tasks: [
-    { id: "t1", title: "Finaliser le contrat Valentin Parisot", notes: "Vérifier les clauses BlueCrest + option equity.", date: todayISO(), time: "14:00", durationMin: 0, priority: 1, status: "doing", projectId: "p1", tags: ["legal","equity"], subtasks: [{ id: uid(), title: "Vérifier les clauses", done: true }, { id: uid(), title: "Valider l'option BSA", done: false }], links: [], done: false, files: [], createdAt: Date.now() - 3 * 86400000, updatedAt: Date.now() },
+    { id: "t1", title: "Finaliser le contrat Valentin Parisot", notes: "Vérifier les clauses BlueCrest + option equity.", date: todayISO(), time: "14:00", durationMin: 0, priority: 1, status: "doing", projectId: "p1", tags: ["legal","equity","watchpoint"], subtasks: [{ id: uid(), title: "Vérifier les clauses", done: true }, { id: uid(), title: "Valider l'option BSA", done: false }], links: [], teamShare: false, teamAssignee: null, done: false, files: [], createdAt: Date.now() - 3 * 86400000, updatedAt: Date.now() },
     { id: "t2", title: "Préparer le deck investisseur pré-seed", notes: "", date: todayISO(), time: "", durationMin: 0, priority: 2, status: "todo", projectId: "p1", tags: [], subtasks: [], links: [], done: false, files: [], createdAt: Date.now() - 86400000, updatedAt: Date.now() },
     { id: "t3", title: "Réviser Customer Experience (ECNU)", notes: "", date: dPlus(1), time: "", durationMin: 0, priority: 3, status: "todo", projectId: null, tags: [], subtasks: [], links: [], done: false, files: [], createdAt: Date.now(), updatedAt: Date.now() },
   ],
@@ -272,7 +302,7 @@ export const SEED = {
     { id: "p1", name: "Watchpoint", color: "#2D6BFF", desc: "Market intelligence — montres de luxe", status: "active", dueDate: "", files: [], links: [], notes: "", createdAt: Date.now() - 12 * 86400000, updatedAt: Date.now() },
   ],
   contacts: [
-    { id: "c1", name: "Anthony Broto", company: "Investisseur pré-seed", email: "", phone: "", stage: "Proposition", value: 10000, notes: "5% via augmentation de capital réservée + BSA.", tags: [] },
+    { id: "c1", name: "Anthony Broto", company: "Investisseur pré-seed", email: "", phone: "", stage: "Proposition", value: 10000, notes: "5% via augmentation de capital réservée + BSA.", tags: [], files: [] },
   ],
   notes: [
     { id: "n1", title: "Thèse Watchpoint", body: "Modèle IA propre · 3000$ de crédits obtenus · relié au [[Deck]] investisseur.", projectId: "p1", taskIds: [], pinned: true, createdAt: Date.now() - 2 * 86400000, updatedAt: Date.now() - 2 * 86400000 },
@@ -292,6 +322,7 @@ export function migrate(data) {
   d.v = 2;
   d.tasks = (d.tasks || []).map((t) => ({
     durationMin: 0, status: t.done ? "done" : "todo", tags: [], subtasks: [], links: [],
+    teamShare: false, teamAssignee: null,
     updatedAt: t.createdAt || Date.now(), ...t,
     done: !!t.done, files: t.files || [], priority: t.priority || 3, projectId: t.projectId ?? null,
   }));
@@ -302,7 +333,7 @@ export function migrate(data) {
     status: "active", dueDate: "", links: [], notes: "", createdAt: Date.now(), updatedAt: Date.now(), ...p,
     files: p.files || [],
   }));
-  d.contacts = (d.contacts || []).map((c) => ({ tags: [], ...c }));
+  d.contacts = (d.contacts || []).map((c) => ({ tags: [], files: [], ...c }));
   d.notes = d.notes || [];
   d.activity = d.activity || [];
   d.brainFiles = d.brainFiles || []; /* mémoire générale du Personal Brain (fichiers sans projet) */
